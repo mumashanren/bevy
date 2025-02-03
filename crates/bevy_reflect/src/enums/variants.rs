@@ -1,9 +1,11 @@
-use crate::attributes::{impl_custom_attribute_methods, CustomAttributes};
-use crate::{NamedField, UnnamedField};
-use bevy_utils::HashMap;
-use std::slice::Iter;
-
-use std::sync::Arc;
+use crate::{
+    attributes::{impl_custom_attribute_methods, CustomAttributes},
+    NamedField, UnnamedField,
+};
+use alloc::boxed::Box;
+use bevy_platform_support::collections::HashMap;
+use bevy_platform_support::sync::Arc;
+use core::slice::Iter;
 use thiserror::Error;
 
 /// Describes the form of an enum variant.

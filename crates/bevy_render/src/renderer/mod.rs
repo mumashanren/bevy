@@ -2,10 +2,11 @@ mod graph_runner;
 mod render_device;
 
 use bevy_derive::{Deref, DerefMut};
+#[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
 use bevy_tasks::ComputeTaskPool;
-use bevy_utils::tracing::{error, info, info_span, warn};
 pub use graph_runner::*;
 pub use render_device::*;
+use tracing::{error, info, info_span, warn};
 
 use crate::{
     diagnostic::{internal::DiagnosticsRecorder, RecordDiagnostics},
@@ -15,10 +16,10 @@ use crate::{
     settings::{WgpuSettings, WgpuSettingsPriority},
     view::{ExtractedWindows, ViewTarget},
 };
+use alloc::sync::Arc;
 use bevy_ecs::{prelude::*, system::SystemState};
+use bevy_platform_support::time::Instant;
 use bevy_time::TimeSender;
-use bevy_utils::Instant;
-use std::sync::Arc;
 use wgpu::{
     Adapter, AdapterInfo, CommandBuffer, CommandEncoder, DeviceType, Instance, Queue,
     RequestAdapterOptions,
@@ -35,6 +36,7 @@ pub fn render_system(world: &mut World, state: &mut SystemState<Query<Entity, Wi
     let graph = world.resource::<RenderGraph>();
     let render_device = world.resource::<RenderDevice>();
     let render_queue = world.resource::<RenderQueue>();
+    #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
     let render_adapter = world.resource::<RenderAdapter>();
 
     let res = RenderGraphRunner::run(
@@ -42,10 +44,12 @@ pub fn render_system(world: &mut World, state: &mut SystemState<Query<Entity, Wi
         render_device.clone(), // TODO: is this clone really necessary?
         diagnostics_recorder,
         &render_queue.0,
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
         &render_adapter.0,
         world,
         |encoder| {
             crate::view::screenshot::submit_screenshot_commands(world, encoder);
+            crate::gpu_readback::submit_readback_commands(world, encoder);
         },
     );
 
@@ -57,7 +61,7 @@ pub fn render_system(world: &mut World, state: &mut SystemState<Query<Entity, Wi
         Err(e) => {
             error!("Error running render graph:");
             {
-                let mut src: &dyn std::error::Error = &e;
+                let mut src: &dyn core::error::Error = &e;
                 loop {
                     error!("> {}", src);
                     match src.source() {
@@ -95,8 +99,8 @@ pub fn render_system(world: &mut World, state: &mut SystemState<Query<Entity, Wi
         }
 
         #[cfg(feature = "tracing-tracy")]
-        bevy_utils::tracing::event!(
-            bevy_utils::tracing::Level::INFO,
+        tracing::event!(
+            tracing::Level::INFO,
             message = "finished frame",
             tracy.frame_mark = true
         );
@@ -119,6 +123,7 @@ pub fn render_system(world: &mut World, state: &mut SystemState<Query<Entity, Wi
 }
 
 /// A wrapper to safely make `wgpu` types Send / Sync on web with atomics enabled.
+///
 /// On web with `atomics` enabled the inner value can only be accessed
 /// or dropped on the `wgpu` thread or else a panic will occur.
 /// On other platforms the wrapper simply contains the wrapped value.
@@ -140,12 +145,20 @@ impl<T> WgpuWrapper<T> {
     pub fn new(t: T) -> Self {
         Self(t)
     }
+
+    pub fn into_inner(self) -> T {
+        self.0
+    }
 }
 
 #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
 impl<T> WgpuWrapper<T> {
     pub fn new(t: T) -> Self {
         Self(send_wrapper::SendWrapper::new(t))
+    }
+
+    pub fn into_inner(self) -> T {
+        self.0.take()
     }
 }
 
@@ -195,22 +208,12 @@ pub async fn initialize_renderer(
         );
     }
 
-    #[cfg(feature = "wgpu_trace")]
-    let trace_path = {
-        let path = std::path::Path::new("wgpu_trace");
-        // ignore potential error, wgpu will log it
-        let _ = std::fs::create_dir(path);
-        Some(path)
-    };
-    #[cfg(not(feature = "wgpu_trace"))]
-    let trace_path = None;
-
     // Maybe get features and limits based on what is supported by the adapter/backend
     let mut features = wgpu::Features::empty();
     let mut limits = options.limits.clone();
     if matches!(options.priority, WgpuSettingsPriority::Functionality) {
         features = adapter.features();
-        if adapter_info.device_type == wgpu::DeviceType::DiscreteGpu {
+        if adapter_info.device_type == DeviceType::DiscreteGpu {
             // `MAPPABLE_PRIMARY_BUFFERS` can have a significant, negative performance impact for
             // discrete GPUs due to having to transfer data across the PCI-E bus and so it
             // should not be automatically enabled in this case. It is however beneficial for
@@ -355,8 +358,9 @@ pub async fn initialize_renderer(
                 label: options.device_label.as_ref().map(AsRef::as_ref),
                 required_features: features,
                 required_limits: limits,
+                memory_hints: options.memory_hints.clone(),
             },
-            trace_path,
+            options.trace_path.as_deref(),
         )
         .await
         .unwrap();
@@ -378,6 +382,7 @@ pub struct RenderContext<'w> {
     render_device: RenderDevice,
     command_encoder: Option<CommandEncoder>,
     command_buffer_queue: Vec<QueuedCommandBuffer<'w>>,
+    #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
     force_serial: bool,
     diagnostics_recorder: Option<Arc<DiagnosticsRecorder>>,
 }
@@ -386,6 +391,7 @@ impl<'w> RenderContext<'w> {
     /// Creates a new [`RenderContext`] from a [`RenderDevice`].
     pub fn new(
         render_device: RenderDevice,
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
         adapter_info: AdapterInfo,
         diagnostics_recorder: Option<DiagnosticsRecorder>,
     ) -> Self {
@@ -393,7 +399,10 @@ impl<'w> RenderContext<'w> {
         #[cfg(target_os = "windows")]
         let force_serial =
             adapter_info.driver.contains("AMD") && adapter_info.backend == wgpu::Backend::Vulkan;
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(any(
+            target_os = "windows",
+            all(target_arch = "wasm32", target_feature = "atomics")
+        )))]
         let force_serial = {
             drop(adapter_info);
             false
@@ -403,6 +412,7 @@ impl<'w> RenderContext<'w> {
             render_device,
             command_encoder: None,
             command_buffer_queue: Vec::new(),
+            #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
             force_serial,
             diagnostics_recorder: diagnostics_recorder.map(Arc::new),
         }
@@ -431,7 +441,7 @@ impl<'w> RenderContext<'w> {
     /// configured using the provided `descriptor`.
     pub fn begin_tracked_render_pass<'a>(
         &'a mut self,
-        descriptor: RenderPassDescriptor<'a, '_>,
+        descriptor: RenderPassDescriptor<'_>,
     ) -> TrackedRenderPass<'a> {
         // Cannot use command_encoder() as we need to split the borrow on self
         let command_encoder = self.command_encoder.get_or_insert_with(|| {

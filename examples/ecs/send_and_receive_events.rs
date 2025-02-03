@@ -19,9 +19,7 @@
 //!
 //! Let's look at an example of each.
 
-use bevy::core::FrameCount;
-use bevy::ecs::event::EventCursor;
-use bevy::prelude::*;
+use bevy::{diagnostic::FrameCount, ecs::event::EventCursor, prelude::*};
 
 fn main() {
     let mut app = App::new();
@@ -73,7 +71,7 @@ struct DebugEvent {
 
 /// A system that sends all combinations of events.
 fn send_events(mut events: EventWriter<DebugEvent>, frame_count: Res<FrameCount>) {
-    println!("Sending events for frame {:?}", frame_count.0);
+    println!("Sending events for frame {}", frame_count.0);
 
     events.send(DebugEvent {
         resend_from_param_set: false,
@@ -102,7 +100,7 @@ fn send_events(mut events: EventWriter<DebugEvent>, frame_count: Res<FrameCount>
 /// Note that some events will be printed twice, because they were sent twice.
 fn debug_events(mut events: EventReader<DebugEvent>) {
     for event in events.read() {
-        println!("{:?}", event);
+        println!("{event:?}");
     }
 }
 

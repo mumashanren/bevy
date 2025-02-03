@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, num::NonZeroU64};
+use core::{marker::PhantomData, num::NonZero};
 
 use crate::{
     render_resource::Buffer,
@@ -27,12 +27,12 @@ use super::IntoBinding;
 /// (vectors), or structures with fields that are vectors.
 ///
 /// Other options for storing GPU-accessible data are:
-/// * [`StorageBuffer`](crate::render_resource::StorageBuffer)
+/// * [`BufferVec`](crate::render_resource::BufferVec)
 /// * [`DynamicStorageBuffer`](crate::render_resource::DynamicStorageBuffer)
 /// * [`DynamicUniformBuffer`]
 /// * [`GpuArrayBuffer`](crate::render_resource::GpuArrayBuffer)
 /// * [`RawBufferVec`](crate::render_resource::RawBufferVec)
-/// * [`BufferVec`](crate::render_resource::BufferVec)
+/// * [`StorageBuffer`](crate::render_resource::StorageBuffer)
 /// * [`Texture`](crate::render_resource::Texture)
 ///
 /// [std140 alignment/padding requirements]: https://www.w3.org/TR/WGSL/#address-spaces-uniform
@@ -164,14 +164,13 @@ impl<'a, T: ShaderType + WriteInto> IntoBinding<'a> for &'a UniformBuffer<T> {
 /// (vectors), or structures with fields that are vectors.
 ///
 /// Other options for storing GPU-accessible data are:
-/// * [`StorageBuffer`](crate::render_resource::StorageBuffer)
+/// * [`BufferVec`](crate::render_resource::BufferVec)
 /// * [`DynamicStorageBuffer`](crate::render_resource::DynamicStorageBuffer)
-/// * [`UniformBuffer`]
-/// * [`DynamicUniformBuffer`]
 /// * [`GpuArrayBuffer`](crate::render_resource::GpuArrayBuffer)
 /// * [`RawBufferVec`](crate::render_resource::RawBufferVec)
-/// * [`BufferVec`](crate::render_resource::BufferVec)
+/// * [`StorageBuffer`](crate::render_resource::StorageBuffer)
 /// * [`Texture`](crate::render_resource::Texture)
+/// * [`UniformBuffer`]
 ///
 /// [std140 alignment/padding requirements]: https://www.w3.org/TR/WGSL/#address-spaces-uniform
 pub struct DynamicUniformBuffer<T: ShaderType> {
@@ -309,7 +308,7 @@ impl<T: ShaderType + WriteInto> DynamicUniformBuffer<T> {
 
         if let Some(buffer) = self.buffer.as_deref() {
             let buffer_view = queue
-                .write_buffer_with(buffer, 0, NonZeroU64::new(buffer.size())?)
+                .write_buffer_with(buffer, 0, NonZero::<u64>::new(buffer.size())?)
                 .unwrap();
             Some(DynamicUniformBufferWriter {
                 buffer: encase::DynamicUniformBuffer::new_with_alignment(

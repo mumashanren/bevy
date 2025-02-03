@@ -1,5 +1,3 @@
-#![warn(missing_docs)]
-
 //! Adds motion vector support to skyboxes. See [`SkyboxPrepassPipeline`] for details.
 
 use bevy_asset::Handle;
@@ -7,7 +5,8 @@ use bevy_ecs::{
     component::Component,
     entity::Entity,
     query::{Has, With},
-    system::{Commands, Query, Res, ResMut, Resource},
+    resource::Resource,
+    system::{Commands, Query, Res, ResMut},
     world::{FromWorld, World},
 };
 use bevy_render::{
@@ -107,6 +106,7 @@ impl SpecializedRenderPipeline for SkyboxPrepassPipeline {
                 entry_point: "fragment".into(),
                 targets: prepass_target_descriptors(key.normal_prepass, true, false),
             }),
+            zero_initialize_workgroup_memory: false,
         }
     }
 }
