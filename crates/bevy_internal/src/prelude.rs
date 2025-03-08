@@ -1,9 +1,24 @@
 #[doc(hidden)]
 pub use crate::{
-    app::prelude::*, core::prelude::*, ecs::prelude::*, hierarchy::prelude::*, input::prelude::*,
-    log::prelude::*, math::prelude::*, reflect::prelude::*, time::prelude::*,
-    transform::prelude::*, utils::prelude::*, window::prelude::*, DefaultPlugins, MinimalPlugins,
+    app::prelude::*, ecs::prelude::*, reflect::prelude::*, time::prelude::*, utils::prelude::*,
+    DefaultPlugins, MinimalPlugins,
 };
+
+#[doc(hidden)]
+#[cfg(any(feature = "libm", feature = "std"))]
+pub use crate::{input::prelude::*, math::prelude::*, transform::prelude::*};
+
+#[doc(hidden)]
+#[cfg(feature = "bevy_log")]
+pub use crate::log::prelude::*;
+
+#[doc(hidden)]
+#[cfg(feature = "bevy_window")]
+pub use crate::window::prelude::*;
+
+#[doc(hidden)]
+#[cfg(feature = "bevy_image")]
+pub use crate::image::prelude::*;
 
 pub use bevy_derive::{bevy_main, Deref, DerefMut};
 
@@ -66,3 +81,7 @@ pub use crate::state::prelude::*;
 #[doc(hidden)]
 #[cfg(feature = "bevy_gltf")]
 pub use crate::gltf::prelude::*;
+
+#[doc(hidden)]
+#[cfg(feature = "bevy_picking")]
+pub use crate::picking::prelude::*;
