@@ -1,9 +1,9 @@
+use bevy_platform_support::collections::HashMap;
 use bevy_render::{
     mesh::{MeshVertexAttribute, VertexAttributeValues as Values},
     prelude::Mesh,
     render_resource::VertexFormat,
 };
-use bevy_utils::HashMap;
 use gltf::{
     accessor::{DataType, Dimensions},
     mesh::util::{ReadColors, ReadJoints, ReadTexCoords, ReadWeights},
@@ -272,7 +272,7 @@ pub(crate) fn convert_attribute(
         }
         gltf::Semantic::Extras(name) => custom_vertex_attributes
             .get(name.as_str())
-            .map(|attr| (attr.clone(), ConversionMode::Any)),
+            .map(|attr| (*attr, ConversionMode::Any)),
         _ => None,
     } {
         let raw_iter = VertexAttributeIter::from_accessor(accessor.clone(), buffer_data);
